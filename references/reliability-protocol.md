@@ -10,8 +10,8 @@ reliability review uses at least two runs of the literal, operational, and
 adversarial roles, for at least six units. A brief review may use one run, but
 must report selection frequency as unavailable across runs.
 
-Keep the specification, resolution, scope, external assumptions, and scenario
-set fixed across runs. Permute scenario order and role launch order between
+Keep the specification, scope, external assumptions, and scenario set fixed
+across runs. Permute scenario order and role launch order between
 runs when practical; do not change scenario content.
 
 ## Canonical Finding Fields
@@ -28,6 +28,26 @@ scenario_ids
 type
 severity_vector
 ```
+
+The identity of a finding is `Actor | Trigger | Unresolved decision |
+Observable consequence`; normalize these four fields before comparing.
+
+The severity vector is `Impact / Reach / Reversibility / Exposure / Evidence`,
+using only these values:
+
+| Field | Values | Rule |
+|---|---|---|
+| Impact | `catastrophic`, `major`, `moderate`, `minor` | Maps to the rubric's severity: Critical, High, Medium, Low. |
+| Reach | `core`, `boundary`, `edge` | `core` changes the primary state transition or an invariant (the rubric's "core"); `boundary` changes caller-visible exceptional behavior; `edge` is an uncommon, limited path. |
+| Reversibility | `irreversible`, `recoverable`, `transient` | Whether normal corrective action restores the state, an explicit correction is needed, or the effect disappears by itself. |
+| Exposure | `external`, `internal` | `external` affects a user, caller, persisted contract, or cross-component interface. |
+| Evidence | `explicit`, `inferred` | `explicit` is shown directly by conflicting or missing clauses; `inferred` needs stated domain or architecture facts. |
+
+When merging, keep the highest value any member demonstrated
+(`catastrophic > major > moderate > minor`, `core > boundary > edge`,
+`irreversible > recoverable > transient`, `external > internal`,
+`explicit > inferred`), and choose the type by the order of the rubric's type
+table.
 
 ## Contradiction-Aware Matching
 
@@ -125,8 +145,9 @@ unstable chance-corrected statistic.
 
 ## Verdict
 
-Apply the verdict mapping in `review-rubric.md` to Core and Supported findings
-only. Always list Contested findings separately.
+Apply the verdict table in `review-rubric.md` to Core and Supported findings
+only, reading "core" from `Reach: core`. Always list Contested findings
+separately.
 
 ## Calibration
 

@@ -22,12 +22,13 @@ The skill breaks the cycle by forcing the spec to *prove* it is unambiguous **be
 
 ### How it works
 
-1.  **Scope** — derive a single shared **scenario set**: concrete probe cases that exercise the boundaries, conflicting clauses, concurrency, and time/limit interactions.
-2.  **Perturb & implement** — produce blind `literal`, `operational`, and `adversarial` shadow implementations.
-3.  **Judge** — compare scenarios, normalize candidate findings, and cluster semantically equivalent findings while rejecting merely similar or contradictory matches.
-4.  **Report** — emit a compact stability profile and precise repairs. Optional reliability audits add repeated runs and finding-support metrics.
+1.  **Model** — list the behavior the spec states and the assumptions an implementer would have to make.
+2.  **Scenarios** — concrete probe cases at the limits, where clauses interact, where an assumption is flipped, and outside what the spec's own examples cover.
+3.  **Blind readings** — `literal`, `operational`, and `adversarial` readings each predict the outcome of every scenario.
+4.  **Probe the disagreements** — where the readings split, add follow-up scenarios aimed at the split and run them again.
+5.  **Report** — a verdict, the findings traced to source clauses, minimal revisions, and acceptance tests. Optional reliability audits add repeated runs and finding-support metrics.
 
-> The blind, multi-agent path is what reliably surfaces divergence. Run without subagents and the skill marks the review `degraded single-context (lower confidence)` rather than pretending the interpretations were independent.
+> The blind, multi-agent path is what reliably surfaces divergence. Run without subagents and the skill marks the review `single-context (lower confidence)` rather than pretending the readings were independent.
 
 ---
 
@@ -36,7 +37,7 @@ The skill breaks the cycle by forcing the spec to *prove* it is unambiguous **be
 | Path | Purpose |
 |---|---|
 | `SKILL.md` | The skill: the full review procedure and output contract. |
-| `references/review-rubric.md` | Finding types, severity, review-resolution levels (`L1`–`L4`), evidence and revision standards. |
+| `references/review-rubric.md` | Finding types, severity, verdict, evidence standard, high-risk checks, revision quality. |
 | `references/reliability-protocol.md` | Optional repeated-run finding matching and support-tier protocol. |
 | `scripts/aggregate_reliability.py` | Deterministic aggregation for an optional reliability audit. |
 
@@ -52,17 +53,16 @@ Use behavioral-spec-linter to stress-test this specification and propose precise
 
 You get back a structured review:
 
-- a **verdict** and an uncalibrated **stability profile** showing scenario
-  convergence, finding counts, highest severity, and review confidence;
-- the interpretation **mode** (independent subagents vs. degraded single-context);
-- a compact findings table with semantic identities, severity vectors, sources,
-  and proposed contracts;
+- a **verdict** with a one-line reason, and a summary: how many scenarios
+  every reading agreed on, open findings by severity, and the review mode;
+- a findings table: severity, type, source clause and scenarios, what the
+  readings disagree on, and the proposed contract;
 - **Well-specified** clauses that are already deterministic and should not be touched;
-- **hidden assumptions**, **acceptance criteria**, and **open decisions**
+- **hidden assumptions**, **acceptance tests**, and **open decisions**
   (product or architecture choices the source cannot resolve).
 
 A worked end-to-end example is included at the bottom of [`SKILL.md`](SKILL.md).
-Repeated runs are opt-in; ordinary reviews still use one three-role pass.
+Repeated runs are opt-in; an ordinary review is one three-reading pass plus a follow-up round on the disagreements.
 
 ---
 
