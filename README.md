@@ -1,71 +1,67 @@
-# 🛡️ Behavioral Spec Linter
+# Behavioral Spec Linter：實驗報告
 
-> **Stop letting AI agents "hallucinate" your business logic. Validate your specs before you write a single line of code.**
+**狀態：已封存。** 這個 repo 原本是一個 agent skill，用來審查規格書和其他規則型文件裡的歧義、矛盾、遺漏情況和隱含假設。2026 年 10 月，我們拿它跟「直接請模型做同樣的審查」做了比較。在 Claude Opus 5.5 上，skill 找到的問題沒有比直接請求多，成本卻是兩倍以上。這份 README 記錄試過什麼、量到什麼，以及為什麼目前的模型不需要這個 skill。
 
-`behavioral-spec-linter` is an **agent skill** that acts as a **semantic linter** for software design documents (SDDs), requirement specs, API contracts, user stories, and implementation plans.
+## 重點摘要
 
-Instead of just generating code, it **stress-tests** your requirements with adversarial semantic perturbation to find the hidden ambiguities that lead to AI-generated bugs — and proposes minimal, testable revisions.
+- 測試文本是一份模型從沒見過、約 1,660 字的新政策，裡面埋了 8 處用字層級的歧義。直接請求（「審查這份規格書的歧義、矛盾、遺漏情況和隱含假設，並提出精確的修訂」）三次各抓到 7、7、7 處，最終版 skill 抓到 7、7.5、7 處。
+- skill 之前看起來的優勢，都來自它自己的不同版本互相比較，或來自模型背過原文的測試文本。一旦在沒看過的文本上直接跟「直接請求」比，優勢就消失了。
+- 剩下有用的部分很少：一種輸出格式偏好，以及 `scripts/diff_readings.py`，可用來驗證數值或狀態規則的修訂。
 
----
+## skill 試過什麼
 
-## ❌ The Problem: "The Guessing Game"
+**第 1 版：盲讀 readings（約 190 行，加上腳本）。** 三個 subagent 分別扮演三種讀法（literal、operational、adversarial）讀規格書，各自預測 5 到 7 個情境的結果。如果行為是規則型的，每份 reading 還要寫一個可執行的 `outcome(case)` 函式，由 `diff_readings.py` 列舉邊界案例，找出它們意見分歧的地方。分歧就變成 findings 和給作者的問題，修訂後再重跑 readings 確認。另外有一個選用的可靠度稽核，用來彙整多次執行的結果。核心想法是：獨立的讀法會剛好在規格書有歧義的地方產生分歧。
 
-When you give a vague or ambiguous spec to an AI agent (Claude, GPT, Gemini):
+**第 2 版：76 行的審查指引（`SKILL.md`）。** 根據下面的測試結果改寫，內容有：
+- 一次仔細的審查，加上「逐字閱讀」的提示（冠詞、情態詞、量詞、and/or、時間詞、指涉）；
+- 長文用 subagent 分段審查；
+- 以低誤報為目標的嚴格判斷標準；
+- findings 主表設上限；
+- 把 readings 和 `diff_readings.py` 降為選用的驗證步驟。
 
-1.  **The agent guesses**: it fills the logical gaps with its own assumptions.
-2.  **The silent fail**: it writes 500 lines of technically correct but logically wrong code.
-3.  **The debug loop**: you spend hours fixing bugs that all trace back to a single ambiguous sentence.
+## 量到什麼
 
-## ✅ The Solution: Behavioral Spec Linter
+所有測試都用 Claude Opus 5.5 的 subagent，時間是 2026-10-22 到 2026-10-23。每次測試前都先寫好埋入的歧義和答案，計分由我一個人完成。
 
-The skill breaks the cycle by forcing the spec to *prove* it is unambiguous **before** development starts. It treats a specification as a behavioral contract and finds the places where two competent implementers would produce different observable behavior.
+| # | 測試 | 結果 |
+|---|---|---|
+| 1 | 第 1 版在一份三句話的圖書館罰款規格上端到端跑一次 | 找到兩個真正的歧義；第 6 步還抓到修訂本身引進的新歧義（到期日「move back」是往前還是往後）。這次也暴露了腳本的兩個 bug：結果標籤格式不一致，以及標籤裡的數字把一個分歧拆成 131 種模式。兩個都已修好。 |
+| 2 | 第 1 版 vs 單人直接審查，四份短文本（PHQ-9 計分、雙重效果原則、APA 8.07、罰款規格） | 流程找到 13 個問題，直接審查找到 44 個，而且涵蓋了流程找到的全部。readings 只會在有人想到要出的情境上產生分歧，而同一個模型的三份複本盲點相同。 |
+| 3 | 直接審查 + 判斷標準，同樣的短文本 | 我標為真問題的 25 個保留了 23 個，標為誤報的 5 個全部濾掉。只有我一個人標註，每份只跑一次。 |
+| 4 | 長文本（APA 倫理守則第 8 章，約 1,500 字），埋入的方式是新增整句 | 每一組都抓到全部 6 個新增的句子（24/24）；只改原有用字的修改，8 次只抓到 1 次。埋入的修改必須是用字層級的，才量得出差異。 |
+| 5 | 同一份文本，8 處用字層級的修改，skill 的各個版本互相比較 | 只用判斷標準抓到 4/8；加上逐字提示升到 7/8。分段 subagent 找到的天然歧義多很多（約 11/12 對 3/12），但 token 約 5 倍，而且產生 70 到 80 個 findings。 |
+| 6 | 同一份文本，不用 skill，直接請求 | 抓到 7/8 處埋入的修改、約 11/12 個天然歧義。審查的 agent 認出這是 APA 倫理守則，直接拿記憶中的官方原文比對，所以用知名公開文件做埋入測試是無效的。測試 5 的比較只能用來排序各個版本。 |
+| 7 | **最終測試：** 由 subagent 新寫的一份約 1,660 字的受試者庫政策，8 處用字層級的修改，每組跑 3 次 | 直接請求：埋入的修改 7、7、7；天然歧義 9.5、12、9.5（滿分 12）；每次約 5 萬 token。第 2 版 skill：埋入的修改 7、7.5、7；天然歧義 10、12、11；主 agent 每次約 8 萬 token，另加 3 到 6 個段落 subagent。6 次都漏掉同一處修改。 |
 
-### How it works
+埋入的修改、答案和測試流程都在 `evals/seeded-ambiguity.md`。
 
-1.  **Scope** — derive a single shared **scenario set**: concrete probe cases that exercise the boundaries, conflicting clauses, concurrency, and time/limit interactions.
-2.  **Perturb & implement** — produce blind `literal`, `operational`, and `adversarial` shadow implementations.
-3.  **Judge** — compare scenarios, normalize candidate findings, and cluster semantically equivalent findings while rejecting merely similar or contradictory matches.
-4.  **Report** — emit a compact stability profile and precise repairs. Optional reliability audits add repeated runs and finding-support metrics.
+## 為什麼目前的模型不需要這個 skill
 
-> The blind, multi-agent path is what reliably surfaces divergence. Run without subagents and the skill marks the review `degraded single-context (lower confidence)` rather than pretending the interpretations were independent.
+- **模型本來就會做 skill 寫成流程的那些推理。** 直接請它審查，它就會比較不同讀法、舉出具體案例、交叉比對條款、提出修訂。把這些拆給扮演不同角色的 subagent，並沒有讓它多想到什麼讀法，反而漏掉了沒有被寫進情境的那些。
+- **看起來有幫助的做法，修的是直接請求根本沒有的問題。** 逐字提示和分段審查的效果，只是相對於「被要求丟掉模糊用語」的那個版本而言。直接請求本來就讀得很仔細，也會把那些用語列出來。
+- **「獨立」的 readings 其實並不獨立。** 它們是同一個模型、同樣的先驗。在真正的缺陷上（例如一個分數沒有對應的區間、某種情況沒有規則），它們一致同意的次數跟意見分歧的次數一樣多。
+- **判斷標準編碼的是偏好，不是能力。** 它用召回率換取更短的清單。要不要把「reasonable」「significant」這類詞列為缺陷，是看讀者需要什麼而做的選擇，在 prompt 裡寫一句話就能表達。
+- **成本。** 最終版 skill 的偵測率跟直接請求一樣，token 用量卻至少是兩倍。
 
----
+## 還留著什麼
 
-## 📦 What's in here
-
-| Path | Purpose |
+| 路徑 | 適用時機 |
 |---|---|
-| `SKILL.md` | The skill: the full review procedure and output contract. |
-| `references/review-rubric.md` | Finding types, severity, review-resolution levels (`L1`–`L4`), evidence and revision standards. |
-| `references/reliability-protocol.md` | Optional repeated-run finding matching and support-tier protocol. |
-| `scripts/aggregate_reliability.py` | Deterministic aggregation for an optional reliability audit. |
+| `SKILL.md` | 想要第 2 版的審查格式時：結論、設上限的 findings 表（每個 finding 附一個案例）、寫成問題的開放決定。它不會找到更多問題。 |
+| `scripts/diff_readings.py` | 有數值或狀態規則，想機械地確認兩份以上可執行的 readings（例如修訂前後）在列舉的邊界案例上一致時。這是有界測試，不是證明，而且最終測試沒有用到它。 |
+| `evals/seeded-ambiguity.md` | 換模型或換 prompt，想知道某個審查流程是否勝過直接請求時。測試文本必須是模型不可能背過的。 |
 
----
-
-## 🚀 Usage
-
-Invoke the skill on any spec, design doc, or under-specified request:
+如果只要格式，下面這段 prompt 就能做到大部分：
 
 ```
-Use behavioral-spec-linter to stress-test this specification and propose precise revisions.
+審查這份規格書。只報告可觀察行為上的差異，每一項附一個具體案例，
+說明兩種讀法會得到什麼不同結果。先給結論，再給一張最多 15 列的
+findings 表（嚴重度、類型、出處、讀法的分歧點、建議修訂），
+最後把開放決定寫成要問作者的問題。
 ```
 
-You get back a structured review:
+## 限制
 
-- a **verdict** and an uncalibrated **stability profile** showing scenario
-  convergence, finding counts, highest severity, and review confidence;
-- the interpretation **mode** (independent subagents vs. degraded single-context);
-- a compact findings table with semantic identities, severity vectors, sources,
-  and proposed contracts;
-- **Well-specified** clauses that are already deterministic and should not be touched;
-- **hidden assumptions**, **acceptance criteria**, and **open decisions**
-  (product or architecture choices the source cannot resolve).
-
-A worked end-to-end example is included at the bottom of [`SKILL.md`](SKILL.md).
-Repeated runs are opt-in; ordinary reviews still use one three-role pass.
-
----
-
-## 🎯 Design principle
-
-The linter optimizes for **low false positives**. It does not nag about every conceivable missing feature, audit log, or best practice — it reports a problem only when two readings produce materially different behavior, or an omission forces an implementer to guess. Deliberate freedom (`MAY`, explicit ranges, implementation-defined choices) is not treated as a defect.
+- 只有一個模型、一份最終文本、每組 3 次，計分只有一個人。
+- 測試文本從三句話到約 1,700 字。更長的文件，或需要可執行驗證的規格書，結論可能不同。
+- 未來的模型或較弱的模型表現可能不同。要恢復這個 skill 之前，先重跑 eval。
